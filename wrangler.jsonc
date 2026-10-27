@@ -1,0 +1,10 @@
+{
+  // Cloudflare Workers settings. Nitro (the build tool) merges this with what it generates in .output/.
+  // "name" must match the name of your Worker in the Cloudflare dashboard.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "stickai",
+  "compatibility_date": "2025-09-01",
+  // nodejs_compat lets the server read secrets through process.env
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true }
+}

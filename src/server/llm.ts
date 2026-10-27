@@ -1,0 +1,189 @@
+import { env } from "./env";
+import { availableTools, runTool } from "./tools";
+import { requireAccount, throttle } from "./limits";
+import { HttpError, fail, getSession, requireSameOrigin, withCookie } from "./session";
+import type { PluginTool } from "../lib/plugins";
+
+/** How each StickAI model should behave. The id is also sent upstream (see STICK_MODEL_MAP). */
+const MODEL_PROMPTS: Record<string, string> = {
+  stick: "You are Stick. Give short, direct answers. No filler.",
+  "stick-1": "You are Stick 1. You handle everyday questions: be clear, friendly and practical.",
+  "stick-1-1": "You are Stick 1.1. When a question involves uncertainty, separate your answer into Facts (what is established), Assumptions (what you are guessing) and Unknowns (what you can't tell). Skip that structure for simple questions.",
+  "stick-2": "You are Stick 2. You are strong at writing, coding and difficult problems. Reason carefully, check your work, and explain it clearly.",
+  "stick-2-1": "You are Stick 2.1. You understand text and images. When the user attaches images, look at them closely and use what you see.",
+  "stick-build": "You are Stick Build. You produce complete deliverables: full working code, whole pages, finished documents or detailed plans. Never leave out parts with placeholders like '...rest of code'.",
+};
+
+interface ChatBody {
+  model?: string;
+  think?: boolean;
+  instructions?: string;
+  nickname?: string;
+  language?: string;
+  timezone?: string;
+  plugins?: string[];
+  images?: string[];
+  history?: { role: "user" | "assistant"; content: string }[];
+}
+
+type Msg = { role: string; content?: unknown; tool_calls?: unknown; tool_call_id?: string };
+const DEFAULT_SUGGESTIONS = ["Tell me more", "Give me an example", "Summarize that in one line"];
+
+interface Upstream { url: string; key?: string }
+function upstream(): Upstream | null {
+  const url = env("STICK_API_URL")?.replace(/\/$/, "");
+  if (!url) return null;
+  const key = env("STICK_API_KEY");
+  return key ? { url, key } : { url };
+}
+
+function mapModel(id: string): string {
+  try {
+    const map = JSON.parse(env("STICK_MODEL_MAP") ?? "{}") as Record<string, string>;
+    return map[id] ?? id;
+  } catch {
+    return id;
+  }
+}
+
+function systemPrompt(b: ChatBody, live: string[], notLive: string[]) {
+  const parts = [MODEL_PROMPTS[b.model ?? ""] ?? MODEL_PROMPTS["stick-1"]];
+  parts.push(`Today is ${new Date().toISOString().slice(0, 10)}. The user's name is ${b.nickname || "friend"}.`);
+  if (b.language && b.language !== "English") parts.push(`Reply in ${b.language} unless the user asks otherwise.`);
+  if (b.think) parts.push("Think the problem through step by step before answering, then give a well-organised answer.");
+  if (live.length) parts.push(`You can use tools from these connected plugins: ${live.join(", ")}. Use them when they help, and base your answer on the tool results. Before sending messages or creating calendar events, confirm the details with the user unless they clearly asked you to do it. If a tool returns an error, tell the user plainly.`);
+  if (notLive.length) parts.push(`The user enabled these plugins, but they are not linked to a real account yet, so you cannot use them: ${notLive.join(", ")}. If asked to use one, say it isn't connected yet.`);
+  if (b.instructions?.trim()) parts.push(`The user's custom instructions:\n${b.instructions.trim().slice(0, 4000)}`);
+  return parts.join("\n\n");
+}
+
+async function callUpstream(cfg: Upstream, payload: Record<string, unknown>, signal: AbortSignal) {
+  return fetch(`${cfg.url}/chat/completions`, {
+    method: "POST",
+    signal,
+    headers: { "content-type": "application/json", ...(cfg.key ? { Authorization: `Bearer ${cfg.key}` } : {}) },
+    body: JSON.stringify(payload),
+  });
+}
+
+interface Pending { id: string; name: string; args: string }
+
+/** Reads an OpenAI-style SSE stream, forwarding text and collecting tool calls. */
+async function readStream(res: Response, onText: (t: string) => void) {
+  const reader = res.body!.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  const calls = new Map<number, Pending>();
+  let text = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let nl: number;
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line.startsWith("data:")) continue;
+      const data = line.slice(5).trim();
+      if (data === "[DONE]") continue;
+      try {
+        const delta = JSON.parse(data).choices?.[0]?.delta;
+        if (delta?.content) { text += delta.content; onText(delta.content); }
+        for (const tc of delta?.tool_calls ?? []) {
+          const cur = calls.get(tc.index ?? 0) ?? { id: "", name: "", args: "" };
+          if (tc.id) cur.id = tc.id;
+          if (tc.function?.name) cur.name += tc.function.name;
+          if (tc.function?.arguments) cur.args += tc.function.arguments;
+          calls.set(tc.index ?? 0, cur);
+        }
+      } catch { /* ignore keep-alives and partial lines */ }
+    }
+  }
+  return { text, calls: [...calls.values()].filter((c) => c.name) };
+}
+
+function toOpenAiTools(tools: PluginTool[]) {
+  return tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } }));
+}
+
+export async function handleChat(request: Request): Promise<Response> {
+  try {
+    requireSameOrigin(request);
+    const cfg = upstream();
+    if (!cfg) return new Response(JSON.stringify({ error: "not_configured" }), { status: 501, headers: { "content-type": "application/json" } });
+    if (Number(request.headers.get("content-length") ?? 0) > 6_000_000) throw new HttpError(413, "That message is too large.");
+
+    const body = (await request.json()) as ChatBody;
+    const history = (body.history ?? []).slice(-40).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content ?? "").slice(0, 20000) }));
+    const lastTurn = history[history.length - 1];
+    if (!lastTurn || lastTurn.role !== "user") throw new HttpError(400, "Nothing to answer.");
+
+    const { session, setCookie } = await getSession(request);
+    requireAccount(session);
+    await throttle(`rl:chat:${session.uid}`, Number(env("STICK_CHAT_LIMIT_PER_HOUR")) || 60, 3600, "You've reached the hourly message limit. Try again later.");
+    const requested = Array.isArray(body.plugins) ? body.plugins.filter((p) => typeof p === "string").slice(0, 30) : [];
+    const { tools, live, notLive } = await availableTools(session.uid, requested);
+
+    const messages: Msg[] = [{ role: "system", content: systemPrompt(body, live, notLive) }, ...history];
+    const images = (body.images ?? []).filter((i) => typeof i === "string" && i.startsWith("data:image/")).slice(0, 3);
+    if (images.length) {
+      const last = messages[messages.length - 1];
+      messages[messages.length - 1] = { role: "user", content: [{ type: "text", text: String(last?.content || "What is in these images?") }, ...images.map((url) => ({ type: "image_url", image_url: { url } }))] };
+    }
+
+    const model = mapModel(body.model && MODEL_PROMPTS[body.model] ? body.model : "stick-1");
+    const enc = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        const send = (o: unknown) => controller.enqueue(enc.encode(`data: ${JSON.stringify(o)}\n\n`));
+        try {
+          let answer = "";
+          for (let round = 0; round < 5; round++) {
+            const res = await callUpstream(cfg, { model, messages, stream: true, ...(tools.length ? { tools: toOpenAiTools(tools) } : {}) }, request.signal);
+            if (!res.ok || !res.body) {
+              const detail = (await res.text().catch(() => "")).slice(0, 200);
+              throw new Error(res.status === 401 || res.status === 403 ? "The model rejected the API key." : `The model returned an error (${res.status}). ${detail}`.trim());
+            }
+            const { text, calls } = await readStream(res, (t) => send({ type: "token", text: t }));
+            answer += text;
+            if (!calls.length) break;
+            messages.push({ role: "assistant", content: text || null, tool_calls: calls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.args || "{}" } })) });
+            for (const c of calls) {
+              send({ type: "tool", name: c.name });
+              const result = await runTool(c.name, c.args, { uid: session.uid, ...(body.timezone ? { timezone: body.timezone } : {}) });
+              messages.push({ role: "tool", tool_call_id: c.id, content: JSON.stringify(result).slice(0, 12000) });
+            }
+          }
+          send({ type: "suggestions", items: answer ? await suggest(cfg, model, lastTurn.content, answer, request.signal) : DEFAULT_SUGGESTIONS });
+          send({ type: "done" });
+        } catch (e) {
+          if (!request.signal.aborted) send({ type: "error", message: e instanceof Error ? e.message : "The model couldn't be reached." });
+        } finally {
+          controller.close();
+        }
+      },
+    });
+    return withCookie(new Response(stream, { headers: { "content-type": "text/event-stream", "cache-control": "no-cache, no-transform", "x-accel-buffering": "no" } }), setCookie);
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+async function suggest(cfg: Upstream, model: string, question: string, answer: string, signal: AbortSignal): Promise<string[]> {
+  try {
+    const res = await callUpstream(cfg, {
+      model, stream: false, max_tokens: 80,
+      messages: [
+        { role: "system", content: "Reply with ONLY a JSON array of exactly 3 short follow-up questions or actions (max 6 words each) the user might ask next." },
+        { role: "user", content: `User asked: ${question.slice(0, 500)}\nAssistant answered: ${answer.slice(0, 1500)}` },
+      ],
+    }, signal);
+    if (!res.ok) return DEFAULT_SUGGESTIONS;
+    const content: string = (await res.json()).choices?.[0]?.message?.content ?? "";
+    const arr = JSON.parse(content.slice(content.indexOf("["), content.lastIndexOf("]") + 1));
+    const items = (Array.isArray(arr) ? arr : []).filter((x) => typeof x === "string").map((x: string) => x.slice(0, 60)).slice(0, 3);
+    return items.length ? items : DEFAULT_SUGGESTIONS;
+  } catch {
+    return DEFAULT_SUGGESTIONS;
+  }
+}

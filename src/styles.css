@@ -1,0 +1,153 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+  --color-bubble: var(--bubble);
+  --color-code: var(--code);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --shadow-menu: 0 0 0 1px var(--border), 0 12px 32px -8px oklch(0 0 0 / 0.35);
+  --shadow-composer: 0 0 0 1px var(--border), 0 8px 24px -12px oklch(0 0 0 / 0.3);
+}
+
+:root {
+  --radius: 0.75rem;
+  --primary: oklch(0.69 0.11 160); /* #4caf8a */
+  --primary-hover: oklch(0.75 0.11 162); /* #5bc49c */
+  --primary-foreground: oklch(0.2 0.03 165); /* #0c1f18 */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.2 0 0);
+  --card: oklch(0.97 0 0);
+  --card-foreground: oklch(0.2 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2 0 0);
+  --secondary: oklch(0.95 0 0);
+  --secondary-foreground: oklch(0.2 0 0);
+  --muted: oklch(0.95 0 0);
+  --muted-foreground: oklch(0.5 0 0);
+  --accent: oklch(0.94 0 0);
+  --accent-foreground: oklch(0.2 0 0);
+  --destructive: oklch(0.6 0.2 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0 0 0 / 9%);
+  --input: oklch(0 0 0 / 12%);
+  --ring: var(--primary);
+  --bubble: oklch(0.95 0 0);
+  --code: oklch(0.97 0 0);
+  --sidebar: oklch(0.98 0 0); /* #f9f9f9 */
+  --sidebar-foreground: oklch(0.2 0 0);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: oklch(0.93 0 0);
+  --sidebar-accent-foreground: oklch(0.2 0 0);
+  --sidebar-border: oklch(0 0 0 / 8%);
+  --sidebar-ring: var(--primary);
+}
+
+.dark {
+  --background: oklch(0.252 0 0); /* #212121 */
+  --foreground: oklch(0.95 0 0);
+  --card: oklch(0.31 0 0); /* #2f2f2f */
+  --card-foreground: oklch(0.95 0 0);
+  --popover: oklch(0.31 0 0);
+  --popover-foreground: oklch(0.95 0 0);
+  --secondary: oklch(0.31 0 0);
+  --secondary-foreground: oklch(0.95 0 0);
+  --muted: oklch(0.31 0 0);
+  --muted-foreground: oklch(0.7 0 0);
+  --accent: oklch(0.36 0 0);
+  --accent-foreground: oklch(0.95 0 0);
+  --destructive: oklch(0.68 0.19 22);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 12%);
+  --bubble: oklch(0.31 0 0);
+  --code: oklch(0.2 0 0);
+  --sidebar: oklch(0.252 0 0);
+  --sidebar-foreground: oklch(0.95 0 0);
+  --sidebar-accent: oklch(0.31 0 0);
+  --sidebar-accent-foreground: oklch(0.95 0 0);
+  --sidebar-border: oklch(1 0 0 / 8%);
+}
+
+[data-accent="blue"] {
+  --primary: oklch(0.66 0.15 262); /* #5b8def */
+  --primary-hover: oklch(0.72 0.14 262);
+  --primary-foreground: oklch(0.18 0.04 262);
+}
+[data-accent="slate"] {
+  --primary: oklch(0.66 0.012 250); /* #8a9199 */
+  --primary-hover: oklch(0.73 0.012 250);
+  --primary-foreground: oklch(0.18 0.01 250);
+}
+
+@layer base {
+  * { border-color: var(--color-border); }
+  html, body { font-family: var(--font-sans); }
+  body { background-color: var(--color-background); color: var(--color-foreground); }
+  :focus-visible { outline: 2px solid var(--color-ring); outline-offset: 2px; }
+}
+
+@keyframes fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes caret { 50% { opacity: 0; } }
+@utility animate-fade-up { animation: fade-up 0.45s ease-out both; }
+@utility stream-caret {
+  &::after { content: "▍"; margin-left: 2px; color: var(--color-primary); animation: caret 1s steps(1) infinite; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+}
+
+.prose-chat { line-height: 1.7; }
+.prose-chat > * + * { margin-top: 0.85em; }
+.prose-chat h1 { font-size: 1.5em; font-weight: 700; }
+.prose-chat h2 { font-size: 1.25em; font-weight: 700; }
+.prose-chat h3 { font-size: 1.1em; font-weight: 600; }
+.prose-chat ul { list-style: disc; padding-left: 1.4em; }
+.prose-chat ol { list-style: decimal; padding-left: 1.4em; }
+.prose-chat li + li { margin-top: 0.3em; }
+.prose-chat a { color: var(--color-primary); text-decoration: underline; text-underline-offset: 3px; }
+.prose-chat strong { font-weight: 650; }
+.prose-chat blockquote { border-left: 3px solid var(--color-border); padding-left: 1em; color: var(--color-muted-foreground); }
+.prose-chat :not(pre) > code { font-family: var(--font-mono); font-size: 0.88em; background: var(--color-muted); padding: 0.1em 0.4em; border-radius: 0.35em; }
+.prose-chat table { width: 100%; border-collapse: collapse; font-size: 0.92em; display: block; overflow-x: auto; }
+.prose-chat th, .prose-chat td { border-bottom: 1px solid var(--color-border); padding: 0.5em 0.75em; text-align: left; }
+.prose-chat th { font-weight: 600; }
