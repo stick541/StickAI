@@ -48,6 +48,19 @@ export function Thread({ cid, messages, streamingId, onRegenerate, onSuggest }: 
           <div key={m.id} className="flex gap-3">
             <img src="/stick-logo.png" alt="" className="mt-0.5 size-7 shrink-0 rounded-full" />
             <div className="min-w-0 flex-1">
+              {m.id === streamingId && m.activity && m.activity.length > 0 && (
+                <div aria-live="polite" aria-label="Task progress" className="mb-3 max-w-xl rounded-xl border bg-card/70 p-3">
+                  <div className="mb-2 text-xs font-medium text-muted-foreground">Working on your request</div>
+                  <ol className="space-y-2">
+                    {m.activity.map((step, index) => (
+                      <li key={step.label} className="flex items-center gap-2 text-sm">
+                        {step.status === "done" ? <Check className="size-4 shrink-0 text-primary" /> : <span className="size-4 shrink-0 animate-spin rounded-full border-2 border-primary border-t-transparent" />}
+                        <span className={step.status === "done" ? "text-muted-foreground" : "font-medium"}>{step.label}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
               {m.tools && m.tools.length > 0 && (
                 <div className="mb-2 flex flex-wrap gap-1.5">
                   {[...new Set(m.tools.map((t) => pluginForTool(t)?.id))].map((id) => {
