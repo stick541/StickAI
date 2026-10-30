@@ -200,7 +200,7 @@ export async function handleChat(request: Request): Promise<Response> {
               messages.push({ role: "tool", tool_call_id: c.id, content: JSON.stringify(result).slice(0, 12000) });
             }
           }
-          send({ type: "suggestions", items: answer ? await suggest(cfg, model, lastTurn.content, answer, request.signal) : DEFAULT_SUGGESTIONS });
+          send({ type: "suggestions", items: DEFAULT_SUGGESTIONS });
           send({ type: "done" });
         } catch (e) {
           if (!request.signal.aborted) send({ type: "error", message: e instanceof Error ? e.message : "The model couldn't be reached." });
@@ -212,24 +212,5 @@ export async function handleChat(request: Request): Promise<Response> {
     return withCookie(new Response(stream, { headers: { "content-type": "text/event-stream", "cache-control": "no-cache, no-transform", "x-accel-buffering": "no" } }), setCookie);
   } catch (e) {
     return fail(e);
-  }
-}
-
-async function suggest(cfg: Upstream, model: string, question: string, answer: string, signal: AbortSignal): Promise<string[]> {
-  try {
-    const res = await callUpstream(cfg, {
-      model, stream: false, max_tokens: 80,
-      messages: [
-        { role: "system", content: "Reply with ONLY a JSON array of exactly 3 short follow-up questions or actions (max 6 words each) the user might ask next." },
-        { role: "user", content: `User asked: ${question.slice(0, 500)}\nAssistant answered: ${answer.slice(0, 1500)}` },
-      ],
-    }, signal);
-    if (!res.ok) return DEFAULT_SUGGESTIONS;
-    const content: string = (await res.json()).choices?.[0]?.message?.content ?? "";
-    const arr = JSON.parse(content.slice(content.indexOf("["), content.lastIndexOf("]") + 1));
-    const items = (Array.isArray(arr) ? arr : []).filter((x) => typeof x === "string").map((x: string) => x.slice(0, 60)).slice(0, 3);
-    return items.length ? items : DEFAULT_SUGGESTIONS;
-  } catch {
-    return DEFAULT_SUGGESTIONS;
   }
 }
