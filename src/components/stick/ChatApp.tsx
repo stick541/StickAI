@@ -92,7 +92,15 @@ export function ChatApp() {
         { model, think, instructions, nickname: st.settings.nickname, language: st.settings.language, plugins: st.plugins, history: conv.messages.filter((m) => !m.error).map((m) => ({ role: m.role, content: m.content })), images },
         (t) => { acc += t; useStore.getState().patchMessage(c.id, reply.id, { content: acc }); },
         ctrl.signal,
-        { onTool: (name) => { if (!used.includes(name)) used.push(name); useStore.getState().patchMessage(c.id, reply.id, { tools: [...used] }); } },
+        {
+          onTool: (name) => { if (!used.includes(name)) used.push(name); useStore.getState().patchMessage(c.id, reply.id, { tools: [...used] }); },
+          onActivity: (label, status) => {
+            const current = useStore.getState().conversations.find((x) => x.id === c.id)?.messages.find((x) => x.id === reply.id)?.activity ?? [];
+            const next = current.filter((item) => item.label !== label);
+            next.push({ label, status });
+            useStore.getState().patchMessage(c.id, reply.id, { activity: next });
+          },
+        },
       );
       useStore.getState().patchMessage(c.id, reply.id, { suggestions });
     } catch (e) {
