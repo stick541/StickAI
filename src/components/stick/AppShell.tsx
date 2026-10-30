@@ -106,7 +106,7 @@ function AuthScreen({ persistent, providers }: { persistent: boolean; providers:
             {mode === "register" && <p className="mt-1 text-xs text-muted-foreground">At least 8 characters.</p>}
           </div>
           {error && <p role="alert" className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm">{error}</p>}
-          {!persistent && <p className="rounded-xl border px-4 py-3 text-xs text-muted-foreground">Heads up: this server isn't saving accounts permanently yet, so your account may disappear when it restarts.</p>}
+          
           <button type="submit" disabled={busy} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-60">
             {busy && <Loader2 className="size-4 animate-spin" />}{mode === "login" ? "Sign in" : "Create account"}
           </button>
