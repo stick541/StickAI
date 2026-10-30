@@ -104,7 +104,7 @@ export function ChatApp() {
       );
       useStore.getState().patchMessage(c.id, reply.id, { suggestions });
     } catch (e) {
-      if ((e as Error).name !== "AbortError") useStore.getState().patchMessage(c.id, reply.id, { error: (e as Error).message || "Something went wrong." });
+      if ((e as Error).name !== "AbortError") { const err = e as Error & { retryAt?: number }; useStore.getState().patchMessage(c.id, reply.id, { error: err.message || "Something went wrong.", ...(err.retryAt ? { retryAt: err.retryAt } : {}) }); }
       else if (!acc) useStore.getState().patchMessage(c.id, reply.id, { content: "_Stopped._" });
     } finally {
       setStreamingId(null); abort.current = null;
