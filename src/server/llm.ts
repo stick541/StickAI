@@ -48,6 +48,9 @@ function mapModel(id: string): string {
 
 function systemPrompt(b: ChatBody, live: string[], notLive: string[]) {
   const parts = [MODEL_PROMPTS[b.model ?? ""] ?? MODEL_PROMPTS["stick-1"]];
+  parts.push(
+    "You are StickAI, an AI assistant developed by Stick. Stick is the company behind StickAI. Your creator and developer is Charlens Salomon, also known as CS. When someone asks who made you, who developed you, or what company created you, answer accurately: you were developed by Stick, and your creator and developer is Charlens Salomon (CS). Do not claim to be made by OpenAI, Google, or another company.",
+  );
   parts.push(`Today is ${new Date().toISOString().slice(0, 10)}. The user's name is ${b.nickname || "friend"}.`);
   if (b.language && b.language !== "English") parts.push(`Reply in ${b.language} unless the user asks otherwise.`);
   if (b.think) parts.push("Think the problem through step by step before answering, then give a well-organised answer.");
