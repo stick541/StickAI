@@ -70,16 +70,36 @@ export function Thread({ cid, messages, streamingId, onRegenerate, onSuggest, on
                 </div>
               )}
               {m.error ? (
-                <div role="alert" className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm">
-                  <AlertCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
-                  <div className="flex-1">
-                    <p>{m.error}</p>
-                    {(/usage limit|upgrade your plan|add more usage/i.test(m.error)) && (
-                      <button onClick={onUpgrade} className="mt-2 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary-hover">View upgrade options</button>
-                    )}
+                /usage limit|upgrade your plan|add more usage/i.test(m.error) ? (
+                  <section role="alert" aria-labelledby={`usage-title-${m.id}`} className="my-2 max-w-xl overflow-hidden rounded-2xl border border-primary/30 bg-card shadow-lg">
+                    <div className="bg-gradient-to-br from-primary/15 via-primary/5 to-transparent px-5 pb-5 pt-6 sm:px-6">
+                      <div className="mb-4 flex size-11 items-center justify-center rounded-2xl bg-primary/15 text-primary">
+                        <AlertCircle className="size-6" />
+                      </div>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-primary">StickAI plan limit</p>
+                      <h2 id={`usage-title-${m.id}`} className="text-xl font-semibold tracking-tight sm:text-2xl">You've reached your usage limit</h2>
+                      <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">You've used the AI messages available on your current plan. Upgrade to keep chatting and unlock more of StickAI.</p>
+                      <div className="mt-5 grid gap-2 text-sm text-foreground/90">
+                        <div className="flex items-center gap-2"><Check className="size-4 text-primary" /> More access to advanced Stick models</div>
+                        <div className="flex items-center gap-2"><Check className="size-4 text-primary" /> More room for longer conversations</div>
+                        <div className="flex items-center gap-2"><Check className="size-4 text-primary" /> Priority access when available</div>
+                      </div>
+                      <div className="mt-6 flex flex-col gap-2 sm:flex-row">
+                        <button onClick={onUpgrade} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary-hover">
+                          Explore upgrade plans <span aria-hidden="true">→</span>
+                        </button>
+                        <button onClick={onRegenerate} className="min-h-11 rounded-full border px-5 py-2.5 text-sm font-medium hover:bg-accent">Try again</button>
+                      </div>
+                      <p className="mt-3 text-xs text-muted-foreground">Plan availability and checkout options are shown in the upgrade screen.</p>
+                    </div>
+                  </section>
+                ) : (
+                  <div role="alert" className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm">
+                    <AlertCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
+                    <div className="flex-1">{m.error}</div>
+                    <button onClick={onRegenerate} className="rounded-md px-2 py-0.5 font-medium text-destructive hover:bg-destructive/15">Retry</button>
                   </div>
-                  <button onClick={onRegenerate} className="rounded-md px-2 py-0.5 font-medium text-destructive hover:bg-destructive/15">Retry</button>
-                </div>
+                )
               ) : m.id === streamingId && !m.content ? (
                 <div className="flex h-7 items-center gap-1" aria-label="Stick is thinking">
                   {[0, 1, 2].map((d) => <span key={d} className="size-2 animate-pulse rounded-full bg-muted-foreground" style={{ animationDelay: `${d * 150}ms` }} />)}
