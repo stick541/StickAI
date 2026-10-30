@@ -13,6 +13,8 @@ export interface Message {
   suggestions?: string[];
   /** Plugin tool names the model used while writing this reply. */
   tools?: string[];
+  /** Visible task progress emitted by the server while this reply is running. */
+  activity?: { label: string; status: "active" | "done" }[];
   createdAt: number;
 }
 export interface Conversation {
