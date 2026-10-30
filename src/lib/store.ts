@@ -9,6 +9,7 @@ export interface Message {
   content: string;
   images?: string[];
   error?: string;
+  retryAt?: number;
   feedback?: "up" | "down";
   suggestions?: string[];
   /** Plugin tool names the model used while writing this reply. */
