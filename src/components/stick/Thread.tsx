@@ -32,6 +32,11 @@ function Actions({ m, cid, onRegenerate, isLast }: { m: Message; cid: string; on
 export function Thread({ cid, messages, streamingId, onRegenerate, onSuggest, onUpgrade }: { cid: string; messages: Message[]; streamingId: string | null; onRegenerate: () => void; onSuggest: (s: string) => void; onUpgrade: () => void }) {
   const end = useRef<HTMLDivElement>(null);
   const last = messages[messages.length - 1];
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
   useEffect(() => { end.current?.scrollIntoView({ block: "end" }); }, [messages.length, last?.content]);
 
   return (
@@ -78,7 +83,12 @@ export function Thread({ cid, messages, streamingId, onRegenerate, onSuggest, on
                       </div>
                       <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-primary">StickAI plan limit</p>
                       <h2 id={`usage-title-${m.id}`} className="text-xl font-semibold tracking-tight sm:text-2xl">You've reached your usage limit</h2>
-                      <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">You've used the AI messages available on your current plan. Upgrade to keep chatting and unlock more of StickAI.</p>
+                      <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">{m.retryAt ? "You've temporarily reached the request limit. Your access will recover automatically when this timer ends." : "You've reached the available usage limit for this plan. If your provider does not supply a reset time, waiting may not restore access; check your plan or provider quota."}</p>
+                      {m.retryAt && (() => {
+                        const seconds = Math.max(0, Math.ceil((m.retryAt! - now) / 1000));
+                        const clock = `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
+                        return <div className="mt-4 rounded-xl border border-primary/20 bg-background/70 p-4 text-center"><p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Usage recovery in</p><p className="mt-1 font-mono text-3xl font-semibold tabular-nums" aria-live="off">{clock}</p><p className="mt-1 text-xs text-muted-foreground">{seconds === 0 ? "Your cooldown has ended. You can try again." : "StickAI will let you retry when the countdown reaches zero."}</p></div>;
+                      })()}
                       <div className="mt-5 grid gap-2 text-sm text-foreground/90">
                         <div className="flex items-center gap-2"><Check className="size-4 text-primary" /> More access to advanced Stick models</div>
                         <div className="flex items-center gap-2"><Check className="size-4 text-primary" /> More room for longer conversations</div>
@@ -88,7 +98,7 @@ export function Thread({ cid, messages, streamingId, onRegenerate, onSuggest, on
                         <button onClick={onUpgrade} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary-hover">
                           Explore upgrade plans <span aria-hidden="true">→</span>
                         </button>
-                        <button onClick={onRegenerate} className="min-h-11 rounded-full border px-5 py-2.5 text-sm font-medium hover:bg-accent">Try again</button>
+                        <button onClick={onRegenerate} disabled={!!m.retryAt && m.retryAt > now} className="min-h-11 rounded-full border px-5 py-2.5 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50">{m.retryAt && m.retryAt > now ? "Wait for recovery" : "Try again"}</button>
                       </div>
                       <p className="mt-3 text-xs text-muted-foreground">Plan availability and checkout options are shown in the upgrade screen.</p>
                     </div>
