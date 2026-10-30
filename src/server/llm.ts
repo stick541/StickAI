@@ -215,7 +215,10 @@ export async function handleChat(request: Request): Promise<Response> {
                     : temporarilyUnavailable
                       ? "StickAI's AI provider is temporarily busy. Your message hasn't been charged by StickAI. Please try again in a little while."
                       : `StickAI couldn't get a response from its AI provider (error ${res.status}). Please try again later.`;
-              throw new Error(message);
+              const retryHeader = res.headers.get("retry-after");
+              const retrySeconds = retryHeader ? (Number.isFinite(Number(retryHeader)) ? Number(retryHeader) : Math.max(0, (Date.parse(retryHeader) - Date.now()) / 1000)) : 60;
+              const retryAt = rateLimited && retrySeconds > 0 ? Date.now() + Math.min(retrySeconds, 86400) * 1000 : undefined;
+              throw Object.assign(new Error(rateLimited ? "You've reached a temporary usage limit. StickAI will be available again when the countdown ends." : message), { retryAt });
             }
             const { text, calls } = await readStream(res, (t) => send({ type: "token", text: t }));
             answer += text;
@@ -238,7 +241,7 @@ export async function handleChat(request: Request): Promise<Response> {
           activity("Finalizing the answer", "done");
           send({ type: "done" });
         } catch (e) {
-          if (!request.signal.aborted) send({ type: "error", message: e instanceof Error ? e.message : "The model couldn't be reached." });
+          if (!request.signal.aborted) send({ type: "error", message: e instanceof Error ? e.message : "The model couldn't be reached.", retryAt: typeof (e as { retryAt?: unknown })?.retryAt === "number" ? (e as { retryAt: number }).retryAt : undefined });
         } finally {
           controller.close();
         }
