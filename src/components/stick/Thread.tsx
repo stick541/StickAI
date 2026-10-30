@@ -29,7 +29,7 @@ function Actions({ m, cid, onRegenerate, isLast }: { m: Message; cid: string; on
   );
 }
 
-export function Thread({ cid, messages, streamingId, onRegenerate, onSuggest }: { cid: string; messages: Message[]; streamingId: string | null; onRegenerate: () => void; onSuggest: (s: string) => void }) {
+export function Thread({ cid, messages, streamingId, onRegenerate, onSuggest, onUpgrade }: { cid: string; messages: Message[]; streamingId: string | null; onRegenerate: () => void; onSuggest: (s: string) => void; onUpgrade: () => void }) {
   const end = useRef<HTMLDivElement>(null);
   const last = messages[messages.length - 1];
   useEffect(() => { end.current?.scrollIntoView({ block: "end" }); }, [messages.length, last?.content]);
@@ -72,7 +72,12 @@ export function Thread({ cid, messages, streamingId, onRegenerate, onSuggest }: 
               {m.error ? (
                 <div role="alert" className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm">
                   <AlertCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
-                  <div className="flex-1">{m.error}</div>
+                  <div className="flex-1">
+                    <p>{m.error}</p>
+                    {(/usage limit|upgrade your plan|add more usage/i.test(m.error)) && (
+                      <button onClick={onUpgrade} className="mt-2 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary-hover">View upgrade options</button>
+                    )}
+                  </div>
                   <button onClick={onRegenerate} className="rounded-md px-2 py-0.5 font-medium text-destructive hover:bg-destructive/15">Retry</button>
                 </div>
               ) : m.id === streamingId && !m.content ? (
