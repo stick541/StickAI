@@ -180,7 +180,7 @@ export function ChatApp() {
           <>
             <div className="flex-1 overflow-y-auto">
               {active.temporary && <p className="mt-4 flex items-center justify-center gap-1.5 text-xs text-muted-foreground"><CircleDashed className="size-3.5" />Temporary chat — not saved to history</p>}
-              <Thread cid={active.id} messages={active.messages} streamingId={streamingId} onRegenerate={regenerate} onSuggest={(t) => send(t, [], false)} />
+              <Thread cid={active.id} messages={active.messages} streamingId={streamingId} onRegenerate={regenerate} onSuggest={(t) => send(t, [], false)} onUpgrade={() => setUpgrade(true)} />
             </div>
             <div className="mx-auto w-full max-w-3xl px-3 pb-3 md:px-4">
               <Composer onSend={send} onStop={() => abort.current?.abort()} streaming={!!streamingId} />
