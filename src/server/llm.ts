@@ -193,8 +193,29 @@ export async function handleChat(request: Request): Promise<Response> {
             activity("Generating a response", "active");
             const res = await callUpstream(cfg, { model, messages, stream: true, ...(tools.length ? { tools: toOpenAiTools(tools) } : {}) }, request.signal);
             if (!res.ok || !res.body) {
-              const detail = (await res.text().catch(() => "")).slice(0, 200);
-              throw new Error(res.status === 401 || res.status === 403 ? "The model rejected the API key." : `The model returned an error (${res.status}). ${detail}`.trim());
+              const detail = (await res.text().catch(() => "")).slice(0, 1200);
+              const normalized = detail.toLowerCase();
+              const quotaExceeded =
+                res.status === 402 ||
+                normalized.includes("insufficient_quota") ||
+                normalized.includes("resource_exhausted") ||
+                normalized.includes("quota exceeded") ||
+                normalized.includes("usage limit") ||
+                normalized.includes("billing") ||
+                normalized.includes("out of credits") ||
+                normalized.includes("credits exhausted");
+              const rateLimited = res.status === 429;
+              const temporarilyUnavailable = res.status === 503 || res.status === 502 || res.status === 504;
+              const message = res.status === 401 || res.status === 403
+                ? "StickAI couldn't authenticate with its AI provider. Please contact support."
+                : quotaExceeded
+                  ? "You've reached the available AI usage limit for this plan. Upgrade your plan or add more usage to keep chatting."
+                  : rateLimited
+                    ? "StickAI is receiving too many requests right now. Please wait a moment and try again."
+                    : temporarilyUnavailable
+                      ? "StickAI's AI provider is temporarily busy. Your message hasn't been charged by StickAI. Please try again in a little while."
+                      : `StickAI couldn't get a response from its AI provider (error ${res.status}). Please try again later.`;
+              throw new Error(message);
             }
             const { text, calls } = await readStream(res, (t) => send({ type: "token", text: t }));
             answer += text;
