@@ -183,8 +183,14 @@ export async function handleChat(request: Request): Promise<Response> {
       async start(controller) {
         const send = (o: unknown) => controller.enqueue(enc.encode(`data: ${JSON.stringify(o)}\n\n`));
         try {
+          const activity = (label: string, status: "active" | "done") => send({ type: "activity", label, status });
+          activity("Understanding your request", "active");
+          activity("Understanding your request", "done");
+          activity("Preparing the model", "active");
           let answer = "";
           for (let round = 0; round < 5; round++) {
+            activity("Preparing the model", "done");
+            activity("Generating a response", "active");
             const res = await callUpstream(cfg, { model, messages, stream: true, ...(tools.length ? { tools: toOpenAiTools(tools) } : {}) }, request.signal);
             if (!res.ok || !res.body) {
               const detail = (await res.text().catch(() => "")).slice(0, 200);
@@ -192,15 +198,23 @@ export async function handleChat(request: Request): Promise<Response> {
             }
             const { text, calls } = await readStream(res, (t) => send({ type: "token", text: t }));
             answer += text;
-            if (!calls.length) break;
+            if (!calls.length) {
+              activity("Generating a response", "done");
+              break;
+            }
+            activity("Generating a response", "done");
+            activity("Using connected tools", "active");
             messages.push({ role: "assistant", content: text || null, tool_calls: calls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.args || "{}" } })) });
             for (const c of calls) {
               send({ type: "tool", name: c.name });
               const result = await runTool(c.name, c.args, { uid: session.uid, ...(body.timezone ? { timezone: body.timezone } : {}) });
               messages.push({ role: "tool", tool_call_id: c.id, content: JSON.stringify(result).slice(0, 12000) });
             }
+            activity("Using connected tools", "done");
           }
+          activity("Finalizing the answer", "active");
           send({ type: "suggestions", items: DEFAULT_SUGGESTIONS });
+          activity("Finalizing the answer", "done");
           send({ type: "done" });
         } catch (e) {
           if (!request.signal.aborted) send({ type: "error", message: e instanceof Error ? e.message : "The model couldn't be reached." });
