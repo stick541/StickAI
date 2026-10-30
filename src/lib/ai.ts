@@ -59,12 +59,12 @@ export async function streamReply(req: ChatRequest, onToken: (t: string) => void
       const line = buf.slice(0, i).trim();
       buf = buf.slice(i + 2);
       if (!line.startsWith("data:")) continue;
-      const evt = JSON.parse(line.slice(5)) as { type: string; text?: string; name?: string; items?: string[]; message?: string; label?: string; status?: "active" | "done" };
+      const evt = JSON.parse(line.slice(5)) as { type: string; text?: string; name?: string; items?: string[]; message?: string; label?: string; status?: "active" | "done"; retryAt?: number };
       if (evt.type === "token" && evt.text) onToken(evt.text);
       else if (evt.type === "tool" && evt.name) hooks.onTool?.(evt.name);
       else if (evt.type === "activity" && evt.label) hooks.onActivity?.(evt.label, evt.status ?? "active");
       else if (evt.type === "suggestions" && evt.items) suggestions = evt.items;
-      else if (evt.type === "error") throw new Error(evt.message || "The model couldn't be reached.");
+      else if (evt.type === "error") { const error = new Error(evt.message || "The model couldn't be reached.") as Error & { retryAt?: number }; error.retryAt = evt.retryAt; throw error; }
     }
   }
   return { suggestions };
