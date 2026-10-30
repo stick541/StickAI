@@ -84,16 +84,16 @@ function AuthScreen({ persistent, providers }: { persistent: boolean; providers:
 
         {(providers.google || providers.apple) && (
           <div className="mb-4 space-y-2">
-            {providers.google && <a href="/api/auth/google/start" className="flex w-full items-center justify-center rounded-xl border bg-card py-3 text-sm font-medium hover:bg-accent">Continue with Google</a>}
-            {providers.apple && <a href="/api/auth/apple/start" className="flex w-full items-center justify-center rounded-xl bg-white py-3 text-sm font-medium text-black hover:bg-white/90">Continue with Apple</a>}
+            {providers.google && <a href="/api/auth/google/start" aria-label="Continue with Google" className="flex w-full items-center justify-center gap-3 rounded-xl border bg-white py-3 text-sm font-medium text-[#202124] transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><svg aria-hidden="true" viewBox="0 0 48 48" className="size-5"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.04 13.22l7.98 6.19C12.16 13.72 17.57 9.5 24 9.5Z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.25 5.48-4.73 7.18l7.28 5.65c4.25-3.92 6.69-9.7 6.69-17.3Z"/><path fill="#FBBC05" d="M10.02 28.59A14.4 14.4 0 0 1 9.25 24c0-1.59.27-3.13.76-4.59l-7.98-6.19A23.9 23.9 0 0 0 0 24c0 3.88.93 7.55 2.58 10.78l7.44-6.19Z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.91-5.8l-7.28-5.65c-2.02 1.35-4.61 2.15-8.63 2.15-6.43 0-11.84-4.22-13.98-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48Z"/></svg>Continue with Google</a>}
+            {providers.apple && <a href="/api/auth/apple/start" aria-label="Continue with Apple" className="flex w-full items-center justify-center gap-3 rounded-xl bg-black py-3 text-sm font-medium text-white transition-colors hover:bg-black/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><svg aria-hidden="true" viewBox="0 0 20 24" className="size-5 fill-current"><path d="M16.6 12.8c0-2.2 1.8-3.3 1.9-3.4-1-1.5-2.6-1.7-3.2-1.7-1.4-.1-2.7.8-3.4.8-.7 0-1.8-.8-3-.8-1.6 0-3.1.9-3.9 2.3-1.7 2.9-.4 7.2 1.2 9.5.8 1.1 1.7 2.3 2.9 2.3 1.1 0 1.6-.7 3-.7s1.8.7 3 .7c1.2 0 2-1.1 2.8-2.2.9-1.3 1.3-2.5 1.3-2.6-.1 0-2.6-1-2.6-4.2ZM14.3 6.2c.6-.8 1-1.9.9-3-.9 0-2 .6-2.7 1.4-.6.7-1.1 1.8-1 2.9 1 .1 2.1-.5 2.8-1.3Z"/></svg>Continue with Apple</a>}
             <div className="flex items-center gap-3 py-2 text-xs text-muted-foreground"><span className="h-px flex-1 bg-border" />or use email<span className="h-px flex-1 bg-border" /></div>
           </div>
         )}
 
         <form onSubmit={submit} className="space-y-3">
           <div>
-            <label htmlFor="auth-email" className="mb-1 block text-sm">Email</label>
-            <input id="auth-email" type="email" autoComplete="email" autoFocus required value={email} onChange={(e) => setEmail(e.target.value)} className={field} placeholder="you@example.com" />
+            <label htmlFor="auth-email" className="mb-1 block text-sm">Email address</label>
+            <input id="auth-email" type="email" autoComplete="email" autoFocus required value={email} onChange={(e) => setEmail(e.target.value)} className={field} placeholder="you@gmail.com or another email" />
           </div>
           <div>
             <label htmlFor="auth-pw" className="mb-1 block text-sm">Password</label>
