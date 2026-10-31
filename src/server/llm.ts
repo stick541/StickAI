@@ -120,7 +120,6 @@ RESPONSE QUALITY:
 - Lead with the answer or useful result. Use examples when they clarify. Be concise for simple requests and thorough for complex ones.
 - Match the user's level of expertise without talking down to them. `);
 
-  // Always-on spatial capability (Gemini-style photo → dimensions → volume)
   parts.push(`SPATIAL & VOLUME ESTIMATION FROM PHOTOS:
 You have a calculate_volume tool available at all times. When the user attaches a photo of a space and asks how much material is needed (slime, water, sand, balloons, confetti, etc.), or asks for dimensions:
 1. Analyze the image for scale references (doors ≈ 2.0–2.1 m / 6.5–7 ft tall, people, furniture, tiles, cars).
@@ -198,19 +197,22 @@ export async function handleChat(request: Request): Promise<Response> {
     if (Number(request.headers.get("content-length") ?? 0) > 6_000_000) throw new HttpError(413, "That message is too large.");
 
     const body = (await request.json()) as ChatBody;
-    // Keep context lean for speed (last 24 turns is usually enough)
     const history = (body.history ?? []).slice(-24).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content ?? "").slice(0, 12000) }));
     const lastTurn = history[history.length - 1];
     if (!lastTurn || lastTurn.role !== "user") throw new HttpError(400, "Nothing to answer.");
 
     const { session, setCookie } = await getSession(request);
     requireAccount(session);
-    await throttle(`rl:chat:${session.uid}`, Number(env("STICK_CHAT_LIMIT_PER_HOUR")) || 60, 3600, "You've reached the hourly message limit. Try again later.");
+
     const requested = Array.isArray(body.plugins) ? body.plugins.filter((p) => typeof p === "string").slice(0, 30) : [];
-    const { tools: pluginTools, live, notLive } = await availableTools(session.uid, requested);
+    // Rate limit + plugin token checks in parallel (was sequential — main send delay)
+    const [, toolResult] = await Promise.all([
+      throttle(`rl:chat:${session.uid}`, Number(env("STICK_CHAT_LIMIT_PER_HOUR")) || 60, 3600, "You've reached the hourly message limit. Try again later."),
+      availableTools(session.uid, requested),
+    ]);
+    const { tools: pluginTools, live, notLive } = toolResult;
 
     const images = (body.images ?? []).filter((i) => typeof i === "string" && i.startsWith("data:image/")).slice(0, 3);
-    // Only attach volume tool when images are present (saves tokens / slightly faster routing)
     const tools: PluginTool[] = images.length ? [...CORE_TOOLS, ...pluginTools] : pluginTools;
 
     const messages: Msg[] = [{ role: "system", content: systemPrompt(body, live, notLive) }, ...history];
@@ -227,7 +229,6 @@ export async function handleChat(request: Request): Promise<Response> {
         try {
           const activity = (label: string, status: "active" | "done") => send({ type: "activity", label, status });
 
-          // Lean progress: start the model ASAP, only show meaningful steps
           if (images.length) activity(`Looking at ${images.length} image${images.length > 1 ? "s" : ""}`, "active");
           if (body.think) activity("Thinking step by step", "active");
           activity("Generating a response", "active");
