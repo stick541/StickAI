@@ -134,7 +134,7 @@ Treat numbers as useful estimates from a single photo, never as precise measurem
   );
   parts.push(`Today is ${new Date().toISOString().slice(0, 10)}. The user's name is ${b.nickname || "friend"}.`);
   if (b.language && b.language !== "English") parts.push(`Reply in ${b.language} unless the user asks otherwise.`);
-  if (b.think) parts.push("Think the problem through step by step before answering, then give a well-organised answer.");
+  if (b.think) parts.push("Think the problem through step by step before answering. Show clear intermediate reasoning when it helps the user follow along, then give a well-organised final answer.");
   if (live.length) parts.push(`You can use tools from these connected plugins: ${live.join(", ")}. Use them when they help, and base your answer on the tool results. Before sending messages or creating calendar events, confirm the details with the user unless they clearly asked you to do it. If a tool returns an error, tell the user plainly.`);
   if (notLive.length) parts.push(`The user enabled these plugins, but they are not linked to a real account yet, so you cannot use them: ${notLive.join(", ")}. If asked to use one, say it isn't connected yet.`);
   if (b.instructions?.trim()) parts.push(`The user's custom instructions:\n${b.instructions.trim().slice(0, 4000)}`);
@@ -225,13 +225,26 @@ export async function handleChat(request: Request): Promise<Response> {
         const send = (o: unknown) => controller.enqueue(enc.encode(`data: ${JSON.stringify(o)}\n\n`));
         try {
           const activity = (label: string, status: "active" | "done") => send({ type: "activity", label, status });
-          activity("Understanding your request", "active");
-          activity("Understanding your request", "done");
+
+          // Clearer step-by-step progress (similar to how Grok shows work)
+          activity("Reading your message", "active");
+          activity("Reading your message", "done");
+
+          if (images.length) {
+            activity(`Looking at ${images.length} image${images.length > 1 ? "s" : ""}`, "active");
+            activity(`Looking at ${images.length} image${images.length > 1 ? "s" : ""}`, "done");
+          }
+
+          if (body.think) {
+            activity("Thinking step by step", "active");
+          }
+
           activity("Preparing the model", "active");
           let answer = "";
           for (let round = 0; round < 5; round++) {
             activity("Preparing the model", "done");
-            activity("Generating a response", "active");
+            activity(round === 0 ? "Generating a response" : "Continuing after tools", "active");
+
             const res = await callUpstream(cfg, { model, messages, stream: true, ...(tools.length ? { tools: toOpenAiTools(tools) } : {}) }, request.signal);
             if (!res.ok || !res.body) {
               const detail = (await res.text().catch(() => "")).slice(0, 1200);
@@ -261,25 +274,35 @@ export async function handleChat(request: Request): Promise<Response> {
               const retryAt = rateLimited && retrySeconds > 0 ? Date.now() + Math.min(retrySeconds, 86400) * 1000 : undefined;
               throw Object.assign(new Error(rateLimited ? "You've reached a temporary usage limit. StickAI will be available again when the countdown ends." : message), { retryAt });
             }
+
             const { text, calls } = await readStream(res, (t) => send({ type: "token", text: t }));
             answer += text;
+
             if (!calls.length) {
-              activity("Generating a response", "done");
+              if (body.think) activity("Thinking step by step", "done");
+              activity(round === 0 ? "Generating a response" : "Continuing after tools", "done");
               break;
             }
-            activity("Generating a response", "done");
-            activity("Using connected tools", "active");
+
+            activity(round === 0 ? "Generating a response" : "Continuing after tools", "done");
+            activity(`Using tools (${calls.map(c => c.name).join(", ")})`, "active");
+
             messages.push({ role: "assistant", content: text || null, tool_calls: calls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.args || "{}" } })) });
+
             for (const c of calls) {
               send({ type: "tool", name: c.name });
+              activity(`Running ${c.name}`, "active");
               const result = await runTool(c.name, c.args, { uid: session.uid, ...(body.timezone ? { timezone: body.timezone } : {}) });
               messages.push({ role: "tool", tool_call_id: c.id, content: JSON.stringify(result).slice(0, 12000) });
+              activity(`Running ${c.name}`, "done");
             }
-            activity("Using connected tools", "done");
+
+            activity(`Using tools (${calls.map(c => c.name).join(", ")})`, "done");
           }
-          activity("Finalizing the answer", "active");
+
+          activity("Finalizing answer", "active");
           send({ type: "suggestions", items: DEFAULT_SUGGESTIONS });
-          activity("Finalizing the answer", "done");
+          activity("Finalizing answer", "done");
           send({ type: "done" });
         } catch (e) {
           if (!request.signal.aborted) send({ type: "error", message: e instanceof Error ? e.message : "The model couldn't be reached.", retryAt: typeof (e as { retryAt?: unknown })?.retryAt === "number" ? (e as { retryAt: number }).retryAt : undefined });
