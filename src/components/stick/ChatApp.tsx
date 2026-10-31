@@ -87,10 +87,27 @@ export function ChatApp() {
     const model = MODELS.some((m) => m.id === st.model) ? st.model : (MODELS[1] ?? MODELS[0])?.id ?? "stick-1";
     let acc = "";
     const used: string[] = [];
+
+    // Batch token paints to ~1 frame so the UI stays smooth and feels faster
+    let raf = 0;
+    let pending = "";
+    const flush = () => {
+      raf = 0;
+      if (!pending) return;
+      const text = pending;
+      pending = "";
+      useStore.getState().patchMessage(c.id, reply.id, { content: text });
+    };
+    const onToken = (t: string) => {
+      acc += t;
+      pending = acc;
+      if (!raf) raf = requestAnimationFrame(flush);
+    };
+
     try {
       const { suggestions } = await streamReply(
         { model, think, instructions, nickname: st.settings.nickname, language: st.settings.language, plugins: st.plugins, history: conv.messages.filter((m) => !m.error).map((m) => ({ role: m.role, content: m.content })), images },
-        (t) => { acc += t; useStore.getState().patchMessage(c.id, reply.id, { content: acc }); },
+        onToken,
         ctrl.signal,
         {
           onTool: (name) => { if (!used.includes(name)) used.push(name); useStore.getState().patchMessage(c.id, reply.id, { tools: [...used] }); },
@@ -102,8 +119,10 @@ export function ChatApp() {
           },
         },
       );
-      useStore.getState().patchMessage(c.id, reply.id, { suggestions });
+      if (raf) { cancelAnimationFrame(raf); flush(); }
+      useStore.getState().patchMessage(c.id, reply.id, { content: acc, suggestions });
     } catch (e) {
+      if (raf) { cancelAnimationFrame(raf); flush(); }
       if ((e as Error).name !== "AbortError") { const err = e as Error & { retryAt?: number }; useStore.getState().patchMessage(c.id, reply.id, { error: err.message || "Something went wrong.", ...(err.retryAt ? { retryAt: err.retryAt } : {}) }); }
       else if (!acc) useStore.getState().patchMessage(c.id, reply.id, { content: "_Stopped._" });
     } finally {

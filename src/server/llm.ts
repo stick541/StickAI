@@ -198,7 +198,8 @@ export async function handleChat(request: Request): Promise<Response> {
     if (Number(request.headers.get("content-length") ?? 0) > 6_000_000) throw new HttpError(413, "That message is too large.");
 
     const body = (await request.json()) as ChatBody;
-    const history = (body.history ?? []).slice(-40).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content ?? "").slice(0, 20000) }));
+    // Keep context lean for speed (last 24 turns is usually enough)
+    const history = (body.history ?? []).slice(-24).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content ?? "").slice(0, 12000) }));
     const lastTurn = history[history.length - 1];
     if (!lastTurn || lastTurn.role !== "user") throw new HttpError(400, "Nothing to answer.");
 
@@ -208,11 +209,11 @@ export async function handleChat(request: Request): Promise<Response> {
     const requested = Array.isArray(body.plugins) ? body.plugins.filter((p) => typeof p === "string").slice(0, 30) : [];
     const { tools: pluginTools, live, notLive } = await availableTools(session.uid, requested);
 
-    // Always-available core tools (dimension/volume estimation from photos)
-    const tools: PluginTool[] = [...CORE_TOOLS, ...pluginTools];
+    const images = (body.images ?? []).filter((i) => typeof i === "string" && i.startsWith("data:image/")).slice(0, 3);
+    // Only attach volume tool when images are present (saves tokens / slightly faster routing)
+    const tools: PluginTool[] = images.length ? [...CORE_TOOLS, ...pluginTools] : pluginTools;
 
     const messages: Msg[] = [{ role: "system", content: systemPrompt(body, live, notLive) }, ...history];
-    const images = (body.images ?? []).filter((i) => typeof i === "string" && i.startsWith("data:image/")).slice(0, 3);
     if (images.length) {
       const last = messages[messages.length - 1];
       messages[messages.length - 1] = { role: "user", content: [{ type: "text", text: String(last?.content || "What is in these images?") }, ...images.map((url) => ({ type: "image_url", image_url: { url } }))] };
@@ -226,24 +227,14 @@ export async function handleChat(request: Request): Promise<Response> {
         try {
           const activity = (label: string, status: "active" | "done") => send({ type: "activity", label, status });
 
-          // Clearer step-by-step progress (similar to how Grok shows work)
-          activity("Reading your message", "active");
-          activity("Reading your message", "done");
+          // Lean progress: start the model ASAP, only show meaningful steps
+          if (images.length) activity(`Looking at ${images.length} image${images.length > 1 ? "s" : ""}`, "active");
+          if (body.think) activity("Thinking step by step", "active");
+          activity("Generating a response", "active");
 
-          if (images.length) {
-            activity(`Looking at ${images.length} image${images.length > 1 ? "s" : ""}`, "active");
-            activity(`Looking at ${images.length} image${images.length > 1 ? "s" : ""}`, "done");
-          }
-
-          if (body.think) {
-            activity("Thinking step by step", "active");
-          }
-
-          activity("Preparing the model", "active");
           let answer = "";
           for (let round = 0; round < 5; round++) {
-            activity("Preparing the model", "done");
-            activity(round === 0 ? "Generating a response" : "Continuing after tools", "active");
+            if (round > 0) activity("Continuing after tools", "active");
 
             const res = await callUpstream(cfg, { model, messages, stream: true, ...(tools.length ? { tools: toOpenAiTools(tools) } : {}) }, request.signal);
             if (!res.ok || !res.body) {
@@ -275,6 +266,8 @@ export async function handleChat(request: Request): Promise<Response> {
               throw Object.assign(new Error(rateLimited ? "You've reached a temporary usage limit. StickAI will be available again when the countdown ends." : message), { retryAt });
             }
 
+            if (images.length && round === 0) activity(`Looking at ${images.length} image${images.length > 1 ? "s" : ""}`, "done");
+
             const { text, calls } = await readStream(res, (t) => send({ type: "token", text: t }));
             answer += text;
 
@@ -285,7 +278,7 @@ export async function handleChat(request: Request): Promise<Response> {
             }
 
             activity(round === 0 ? "Generating a response" : "Continuing after tools", "done");
-            activity(`Using tools (${calls.map(c => c.name).join(", ")})`, "active");
+            activity(`Using tools (${calls.map((c) => c.name).join(", ")})`, "active");
 
             messages.push({ role: "assistant", content: text || null, tool_calls: calls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.args || "{}" } })) });
 
@@ -297,7 +290,7 @@ export async function handleChat(request: Request): Promise<Response> {
               activity(`Running ${c.name}`, "done");
             }
 
-            activity(`Using tools (${calls.map(c => c.name).join(", ")})`, "done");
+            activity(`Using tools (${calls.map((c) => c.name).join(", ")})`, "done");
           }
 
           activity("Finalizing answer", "active");
