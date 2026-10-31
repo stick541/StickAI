@@ -1,5 +1,5 @@
 import { env } from "./env";
-import { availableTools, runTool } from "./tools";
+import { availableTools, runTool, CORE_TOOLS } from "./tools";
 import { requireAccount, throttle } from "./limits";
 import { HttpError, fail, getSession, requireSameOrigin, withCookie } from "./session";
 import type { PluginTool } from "../lib/plugins";
@@ -10,7 +10,16 @@ const MODEL_PROMPTS: Record<string, string> = {
   "stick-1": "You are Stick 1. You handle everyday questions: be clear, friendly and practical.",
   "stick-1-1": "You are Stick 1.1. When a question involves uncertainty, separate your answer into Facts (what is established), Assumptions (what you are guessing) and Unknowns (what you can't tell). Skip that structure for simple questions.",
   "stick-2": "You are Stick 2. You are strong at writing, coding and difficult problems. Reason carefully, check your work, and explain it clearly.",
-  "stick-2-1": "You are Stick 2.1. You understand text and images. When the user attaches images, look at them closely and use what you see.",
+  "stick-2-1": `You are Stick 2.1. You understand text and images. When the user attaches images, look at them closely and use what you see.
+
+SPATIAL REASONING & DIMENSION ESTIMATION (core strength):
+When the user uploads a photo of a space (room, pool, backyard, garage, container, truck bed, etc.) and asks about size, dimensions, how much material is needed, or an outrageous idea (fill with slime, balloons, sand, water, etc.):
+1. Carefully examine the photo for scale cues: doors (~2 m / 6.5–7 ft tall), people, furniture, tiles, cars, standard objects.
+2. Give approximate real-world dimensions (length × width × depth/height) in both metric and imperial when useful.
+3. Clearly state your assumptions and confidence level (e.g. “rough estimate ±20–30%”).
+4. If volume is needed, call the calculate_volume tool with your estimated dimensions and the material so the math and unit conversions are clean.
+5. Offer practical next steps: amount of material, delivery ideas, safety notes, rough cost ballpark if relevant.
+Never claim the numbers are surveyor-grade. Always treat them as useful estimates from a single photo.`,
   "stick-build": "You are Stick Build. You produce complete deliverables: full working code, whole pages, finished documents or detailed plans. Never leave out parts with placeholders like '...rest of code'.",
 };
 
@@ -91,6 +100,15 @@ RESPONSE QUALITY:
 - Lead with the answer or useful result. Use examples when they clarify. Be concise for simple requests and thorough for complex ones.
 - Match the user's level of expertise without talking down to them. `);
 
+  // Always-on spatial capability (Gemini-style photo → dimensions → volume)
+  parts.push(`SPATIAL & VOLUME ESTIMATION FROM PHOTOS:
+You have a calculate_volume tool available at all times. When the user attaches a photo of a space and asks how much material is needed (slime, water, sand, balloons, confetti, etc.), or asks for dimensions:
+1. Analyze the image for scale references (doors ≈ 2.0–2.1 m / 6.5–7 ft tall, people, furniture, tiles, cars).
+2. Estimate length, width, and depth/height in meters (or feet) and state your assumptions and uncertainty.
+3. Call calculate_volume with those estimates + the material so unit conversion and practical advice are clean.
+4. Present the result helpfully: total volume, useful units (liters, gallons, cubic meters, cubic feet), and rough logistics ideas.
+Treat numbers as useful estimates from a single photo, never as precise measurements.`);
+
   parts.push(
     "You are StickAI, an AI assistant developed by Stick. Stick is the company behind StickAI. Your creator and developer is Charlens Salomon, also known as CS. When someone asks who made you, who developed you, or what company created you, answer accurately: you were developed by Stick, and your creator and developer is Charlens Salomon (CS). Do not claim to be made by OpenAI, Google, or another company.",
   );
@@ -168,7 +186,10 @@ export async function handleChat(request: Request): Promise<Response> {
     requireAccount(session);
     await throttle(`rl:chat:${session.uid}`, Number(env("STICK_CHAT_LIMIT_PER_HOUR")) || 60, 3600, "You've reached the hourly message limit. Try again later.");
     const requested = Array.isArray(body.plugins) ? body.plugins.filter((p) => typeof p === "string").slice(0, 30) : [];
-    const { tools, live, notLive } = await availableTools(session.uid, requested);
+    const { tools: pluginTools, live, notLive } = await availableTools(session.uid, requested);
+
+    // Always-available core tools (dimension/volume estimation from photos)
+    const tools: PluginTool[] = [...CORE_TOOLS, ...pluginTools];
 
     const messages: Msg[] = [{ role: "system", content: systemPrompt(body, live, notLive) }, ...history];
     const images = (body.images ?? []).filter((i) => typeof i === "string" && i.startsWith("data:image/")).slice(0, 3);

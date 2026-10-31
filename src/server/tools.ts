@@ -6,11 +6,19 @@ export interface ToolContext { uid: string; timezone?: string }
 interface Args {
   query?: unknown; limit?: unknown; subject?: unknown; to?: unknown; from?: unknown; body?: unknown;
   title?: unknown; start?: unknown; end?: unknown; file_id?: unknown; channel?: unknown; text?: unknown;
+  // calculate_volume
+  length_m?: unknown; width_m?: unknown; depth_m?: unknown;
+  length_ft?: unknown; width_ft?: unknown; depth_ft?: unknown;
+  material?: unknown; shape?: unknown; notes?: unknown;
 }
 type Executor = (args: Args, ctx: ToolContext, token: string) => Promise<unknown>;
 
 const str = (v: unknown, fallback = "") => (typeof v === "string" ? v : v == null ? fallback : String(v));
 const num = (v: unknown, fallback: number, max: number) => Math.min(Math.max(Number(v) || fallback, 1), max);
+const numOr = (v: unknown, fallback = 0) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+};
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function api(url: string, token: string, init: RequestInit = {}): Promise<any> {
@@ -52,6 +60,88 @@ const utf8b64 = (s: string) => {
   return btoa(bin);
 };
 const b64url = (s: string) => utf8b64(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+/** Always-available core tools (no OAuth required). */
+export const CORE_TOOLS: PluginTool[] = [
+  {
+    name: "calculate_volume",
+    description:
+      "Calculate the volume of a space from estimated dimensions and return useful units plus practical notes. " +
+      "Use after visually estimating length/width/depth from a photo. Prefer metric (meters); imperial (feet) is also accepted. " +
+      "Shape can be box, cylinder, or sphere. Material is free-text (slime, water, sand, balloons, etc.).",
+    parameters: {
+      type: "object",
+      properties: {
+        length_m: { type: "number", description: "Length in meters (preferred)" },
+        width_m: { type: "number", description: "Width in meters" },
+        depth_m: { type: "number", description: "Depth or height in meters" },
+        length_ft: { type: "number", description: "Length in feet (alternative to meters)" },
+        width_ft: { type: "number", description: "Width in feet" },
+        depth_ft: { type: "number", description: "Depth or height in feet" },
+        shape: { type: "string", description: "box | cylinder | sphere (default box)" },
+        material: { type: "string", description: "What will fill the space (slime, water, sand, balloons, confetti, etc.)" },
+        notes: { type: "string", description: "Any extra assumptions or observations from the photo" },
+      },
+      required: ["material"],
+    },
+  },
+];
+
+const CORE_EXECUTORS: Record<string, (args: Args) => unknown> = {
+  calculate_volume(a) {
+    // Prefer metric; fall back to imperial
+    let L = numOr(a.length_m);
+    let W = numOr(a.width_m);
+    let D = numOr(a.depth_m);
+    if (!L && !W && !D) {
+      L = numOr(a.length_ft) * 0.3048;
+      W = numOr(a.width_ft) * 0.3048;
+      D = numOr(a.depth_ft) * 0.3048;
+    }
+    if (L <= 0 || W <= 0 || D <= 0) {
+      return { error: "Need positive length, width and depth (in meters or feet)." };
+    }
+
+    const shape = str(a.shape, "box").toLowerCase();
+    let volume_m3 = 0;
+    if (shape === "cylinder") {
+      // treat width as diameter
+      const r = W / 2;
+      volume_m3 = Math.PI * r * r * D;
+    } else if (shape === "sphere") {
+      const r = Math.max(L, W, D) / 2;
+      volume_m3 = (4 / 3) * Math.PI * r * r * r;
+    } else {
+      // box / rectangular prism
+      volume_m3 = L * W * D;
+    }
+
+    const liters = volume_m3 * 1000;
+    const us_gallons = liters / 3.785411784;
+    const cubic_feet = volume_m3 * 35.3147;
+
+    const material = str(a.material, "material");
+    const notes = str(a.notes);
+
+    return {
+      ok: true,
+      shape,
+      dimensions_m: { length: +L.toFixed(2), width: +W.toFixed(2), depth: +D.toFixed(2) },
+      volume: {
+        cubic_meters: +volume_m3.toFixed(2),
+        liters: Math.round(liters),
+        us_gallons: Math.round(us_gallons),
+        cubic_feet: +cubic_feet.toFixed(1),
+      },
+      material,
+      notes: notes || undefined,
+      practical: {
+        summary: `Approximately ${Math.round(liters).toLocaleString()} liters (${Math.round(us_gallons).toLocaleString()} US gallons) of ${material}.`,
+        tip: "These are estimates from a single photo. Real volume can vary with irregular shapes, slope, and fill level. Always leave a safety margin.",
+      },
+    };
+  },
+};
 
 const EXECUTORS: Record<string, Executor> = {
   async gmail_search(a, _c, token) {
@@ -128,6 +218,17 @@ export async function availableTools(uid: string, requested: string[]): Promise<
 }
 
 export async function runTool(name: string, rawArgs: string, ctx: ToolContext): Promise<unknown> {
+  // Core tools first (no token needed)
+  const core = CORE_EXECUTORS[name];
+  if (core) {
+    try {
+      const args = rawArgs ? (JSON.parse(rawArgs) as Args) : {};
+      return core(args);
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : "Tool failed." };
+    }
+  }
+
   const exec = EXECUTORS[name];
   const plugin = OWNER[name];
   if (!exec || !plugin) return { error: `Unknown tool ${name}.` };
