@@ -89,7 +89,6 @@ export const CORE_TOOLS: PluginTool[] = [
 
 const CORE_EXECUTORS: Record<string, (args: Args) => unknown> = {
   calculate_volume(a) {
-    // Prefer metric; fall back to imperial
     let L = numOr(a.length_m);
     let W = numOr(a.width_m);
     let D = numOr(a.depth_m);
@@ -105,21 +104,18 @@ const CORE_EXECUTORS: Record<string, (args: Args) => unknown> = {
     const shape = str(a.shape, "box").toLowerCase();
     let volume_m3 = 0;
     if (shape === "cylinder") {
-      // treat width as diameter
       const r = W / 2;
       volume_m3 = Math.PI * r * r * D;
     } else if (shape === "sphere") {
       const r = Math.max(L, W, D) / 2;
       volume_m3 = (4 / 3) * Math.PI * r * r * r;
     } else {
-      // box / rectangular prism
       volume_m3 = L * W * D;
     }
 
     const liters = volume_m3 * 1000;
     const us_gallons = liters / 3.785411784;
     const cubic_feet = volume_m3 * 35.3147;
-
     const material = str(a.material, "material");
     const notes = str(a.notes);
 
@@ -201,24 +197,35 @@ const EXECUTORS: Record<string, Executor> = {
 const OWNER: Record<string, string> = {};
 for (const p of PLUGINS) for (const t of p.tools) OWNER[t.name] = p.id;
 
-/** Tools the model may call right now: implemented AND connected for this user. */
+/** Tools the model may call right now: implemented AND connected for this user. Checks plugins in parallel. */
 export async function availableTools(uid: string, requested: string[]): Promise<{ tools: PluginTool[]; live: string[]; notLive: string[] }> {
+  if (!requested.length) return { tools: [], live: [], notLive: [] };
+
+  const results = await Promise.all(
+    requested.map(async (id) => {
+      const plugin = PLUGINS.find((p) => p.id === id);
+      if (!plugin) return null;
+      if (PLUGIN_PROVIDER[id] && (await loadToken(uid, id))) {
+        return { live: true as const, name: plugin.name, tools: plugin.tools.filter((t) => EXECUTORS[t.name]) };
+      }
+      return { live: false as const, name: plugin.name, tools: [] as PluginTool[] };
+    }),
+  );
+
   const tools: PluginTool[] = [];
   const live: string[] = [];
   const notLive: string[] = [];
-  for (const id of requested) {
-    const plugin = PLUGINS.find((p) => p.id === id);
-    if (!plugin) continue;
-    if (PLUGIN_PROVIDER[id] && (await loadToken(uid, id))) {
-      live.push(plugin.name);
-      tools.push(...plugin.tools.filter((t) => EXECUTORS[t.name]));
-    } else notLive.push(plugin.name);
+  for (const r of results) {
+    if (!r) continue;
+    if (r.live) {
+      live.push(r.name);
+      tools.push(...r.tools);
+    } else notLive.push(r.name);
   }
   return { tools, live, notLive };
 }
 
 export async function runTool(name: string, rawArgs: string, ctx: ToolContext): Promise<unknown> {
-  // Core tools first (no token needed)
   const core = CORE_EXECUTORS[name];
   if (core) {
     try {

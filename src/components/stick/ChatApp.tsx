@@ -33,7 +33,6 @@ export function ChatApp() {
   const project = s.projects.find((p) => p.id === s.activeProject) ?? null;
   const openSettings = (tab?: string) => { setSettingsTab(tab); setSettingsOpen(true); };
 
-  // Theme + accent
   useEffect(() => {
     const root = document.documentElement;
     const apply = () => {
@@ -49,7 +48,6 @@ export function ChatApp() {
 
   useEffect(() => { if (isMobile) s.setSidebar(false); }, [isMobile]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Cloud sync, and the result of a plugin sign-in redirect (sign-in itself is handled by AppShell)
   useEffect(() => {
     const st = useStore.getState();
     const params = new URLSearchParams(location.search);
@@ -62,7 +60,6 @@ export function ChatApp() {
     return startCloudSync();
   }, []);
 
-  // Shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
@@ -79,8 +76,11 @@ export function ChatApp() {
     const st = useStore.getState();
     const reply: Message = { id: uid(), role: "assistant", content: "", createdAt: Date.now() };
     const c = { ...conv, messages: [...conv.messages, reply], updatedAt: Date.now() };
+
+    // Paint user message + thinking dots in the same tick — no waiting for the network
     st.upsert(c);
     setStreamingId(reply.id);
+
     const ctrl = new AbortController(); abort.current = ctrl;
     const proj = st.projects.find((p) => p.id === conv.projectId);
     const instructions = [st.settings.instructions, proj?.instructions && `Project "${proj.name}" instructions:\n${proj.instructions}`].filter(Boolean).join("\n\n");
@@ -88,7 +88,6 @@ export function ChatApp() {
     let acc = "";
     const used: string[] = [];
 
-    // Batch token paints to ~1 frame so the UI stays smooth and feels faster
     let raf = 0;
     let pending = "";
     const flush = () => {
@@ -130,7 +129,6 @@ export function ChatApp() {
     }
   }, []);
 
-  // Scheduled tasks run while StickAI is open in a tab.
   const runTask = useCallback((t: ScheduledTask) => {
     const st = useStore.getState();
     const now = Date.now();
@@ -143,7 +141,7 @@ export function ChatApp() {
 
   useEffect(() => {
     const tick = () => {
-      if (abort.current) return; // wait until the current reply finishes
+      if (abort.current) return;
       const now = Date.now();
       const due = useStore.getState().scheduled.find((t) => t.enabled && t.nextRunAt !== null && t.nextRunAt <= now);
       if (due) runTask(due);
@@ -158,9 +156,10 @@ export function ChatApp() {
     const user: Message = { id: uid(), role: "user", content: text, images, createdAt: Date.now() };
     const base: Conversation = active ?? { id: uid(), title: titleFrom(text), messages: [], updatedAt: Date.now(), temporary: st.temporary, projectId: st.activeProject ?? undefined };
     const conv = { ...base, messages: [...base.messages, user] };
+    // Switch to the chat immediately so the user sees their message + thinking dots with zero lag
     st.upsert(conv);
     st.setActive(conv.id);
-    run(conv, think, images);
+    void run(conv, think, images);
   };
 
   const regenerate = () => {
