@@ -5,6 +5,23 @@ import { useStore } from "@/lib/store";
 import { Markdown } from "./Markdown";
 import { pluginForTool } from "@/lib/plugins";
 
+function ThinkingDots() {
+  return (
+    <div className="flex h-8 items-center gap-2" aria-label="Stick is thinking">
+      <div className="flex items-center gap-1.5">
+        {[0, 1, 2].map((d) => (
+          <span
+            key={d}
+            className="think-dot"
+            style={{ animationDelay: `${d * 160}ms` }}
+          />
+        ))}
+      </div>
+      <span className="text-sm text-muted-foreground">Thinking…</span>
+    </div>
+  );
+}
+
 function Actions({ m, cid, onRegenerate, isLast }: { m: Message; cid: string; onRegenerate: () => void; isLast: boolean }) {
   const patch = useStore((s) => s.patchMessage);
   const voice = useStore((s) => s.settings.voice);
@@ -54,13 +71,22 @@ export function Thread({ cid, messages, streamingId, onRegenerate, onSuggest, on
             <img src="/stick-logo.png" alt="" className="mt-0.5 size-7 shrink-0 rounded-full" />
             <div className="min-w-0 flex-1">
               {m.id === streamingId && m.activity && m.activity.length > 0 && (
-                <div aria-live="polite" aria-label="Task progress" className="mb-3 max-w-xl rounded-xl border bg-card/70 p-3">
-                  <div className="mb-2 text-xs font-medium text-muted-foreground">Working on your request</div>
+                <div aria-live="polite" aria-label="Task progress" className="mb-3 max-w-xl rounded-xl border bg-card/80 p-3.5 shadow-sm">
+                  <div className="mb-2.5 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                    <span className="think-spinner shrink-0" />
+                    Working on your request
+                  </div>
                   <ol className="space-y-2">
-                    {m.activity.map((step, index) => (
-                      <li key={step.label} className="flex items-center gap-2 text-sm">
-                        {step.status === "done" ? <Check className="size-4 shrink-0 text-primary" /> : <span className="size-4 shrink-0 animate-spin rounded-full border-2 border-primary border-t-transparent" />}
-                        <span className={step.status === "done" ? "text-muted-foreground" : "font-medium"}>{step.label}</span>
+                    {m.activity.map((step) => (
+                      <li key={step.label} className="flex items-center gap-2.5 text-sm">
+                        {step.status === "done" ? (
+                          <Check className="size-4 shrink-0 text-primary" />
+                        ) : (
+                          <span className="think-spinner shrink-0" />
+                        )}
+                        <span className={step.status === "done" ? "text-muted-foreground" : "font-medium text-foreground"}>
+                          {step.label}
+                        </span>
                       </li>
                     ))}
                   </ol>
@@ -113,9 +139,7 @@ export function Thread({ cid, messages, streamingId, onRegenerate, onSuggest, on
                   </div>
                 )
               ) : m.id === streamingId && !m.content ? (
-                <div className="flex h-7 items-center gap-1" aria-label="Stick is thinking">
-                  {[0, 1, 2].map((d) => <span key={d} className="size-2 animate-pulse rounded-full bg-muted-foreground" style={{ animationDelay: `${d * 150}ms` }} />)}
-                </div>
+                <ThinkingDots />
               ) : (
                 <Markdown text={m.content} streaming={m.id === streamingId} />
               )}
