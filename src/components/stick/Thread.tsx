@@ -53,9 +53,9 @@ export function Thread({ cid, messages, streamingId, onRegenerate, onSuggest, on
           <div key={m.id} className="flex gap-3">
             <img src="/stick-logo.png" alt="" className="mt-0.5 size-7 shrink-0 rounded-full" />
             <div className="min-w-0 flex-1">
-              {m.id === streamingId && m.activity && m.activity.length > 0 && (
+              {m.id === streamingId && !m.content && !m.error && m.activity && m.activity.length > 0 && (
                 <div aria-live="polite" aria-label="Task progress" className="mb-3 max-w-xl rounded-xl border bg-card/70 p-3">
-                  <div className="mb-2 text-xs font-medium text-muted-foreground">Working on your request</div>
+                  <div className="mb-2 flex items-center gap-2 text-xs font-medium text-muted-foreground"><span className="size-1.5 animate-pulse rounded-full bg-primary" />StickAI is working</div>
                   <ol className="space-y-2">
                     {m.activity.map((step, index) => (
                       <li key={step.label} className="flex items-center gap-2 text-sm">
