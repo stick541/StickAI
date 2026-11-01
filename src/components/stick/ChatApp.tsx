@@ -77,11 +77,15 @@ export function ChatApp() {
 
   const run = useCallback(async (conv: Conversation, think: boolean, images: string[]) => {
     const st = useStore.getState();
-    const reply: Message = { id: uid(), role: "assistant", content: "", createdAt: Date.now() };
+    const reply: Message = { id: uid(), role: "assistant", content: "", activity: [{ label: "Understanding your request", status: "done" }, { label: "Preparing the response", status: "active" }], createdAt: Date.now() };
     const c = { ...conv, messages: [...conv.messages, reply], updatedAt: Date.now() };
     st.upsert(c);
     setStreamingId(reply.id);
     const ctrl = new AbortController(); abort.current = ctrl;
+    const timeoutId = window.setTimeout(() => {
+      useStore.getState().patchMessage(c.id, reply.id, { error: "StickAI is taking longer than expected. Please try again." });
+      ctrl.abort();
+    }, 60000);
     const proj = st.projects.find((p) => p.id === conv.projectId);
     const instructions = [st.settings.instructions, proj?.instructions && `Project "${proj.name}" instructions:\n${proj.instructions}`].filter(Boolean).join("\n\n");
     const model = MODELS.some((m) => m.id === st.model) ? st.model : (MODELS[1] ?? MODELS[0])?.id ?? "stick-1";
@@ -107,6 +111,7 @@ export function ChatApp() {
       if ((e as Error).name !== "AbortError") { const err = e as Error & { retryAt?: number }; useStore.getState().patchMessage(c.id, reply.id, { error: err.message || "Something went wrong.", ...(err.retryAt ? { retryAt: err.retryAt } : {}) }); }
       else if (!acc) useStore.getState().patchMessage(c.id, reply.id, { content: "_Stopped._" });
     } finally {
+      window.clearTimeout(timeoutId);
       setStreamingId(null); abort.current = null;
     }
   }, []);
