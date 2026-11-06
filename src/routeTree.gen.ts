@@ -14,6 +14,7 @@ import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as ApiChatRouteImport } from './routes/api.chat'
 import { Route as ApiImagesRouteImport } from './routes/api.images'
+import { Route as ApiCreateFileRouteImport } from './routes/api.create-file'
 import { Route as ApiSyncRouteImport } from './routes/api.sync'
 import { Route as ApiAuthActionRouteImport } from './routes/api.auth.$action'
 import { Route as ApiPluginsDisconnectRouteImport } from './routes/api.plugins.disconnect'
@@ -46,6 +47,11 @@ const ApiChatRoute = ApiChatRouteImport.update({
 const ApiImagesRoute = ApiImagesRouteImport.update({
   id: '/api/images',
   path: '/api/images',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCreateFileRoute = ApiCreateFileRouteImport.update({
+  id: '/api/create-file',
+  path: '/api/create-file',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiSyncRoute = ApiSyncRouteImport.update({
@@ -96,6 +102,7 @@ export interface FileRoutesByFullPath {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/api/chat': typeof ApiChatRoute
   '/api/images': typeof ApiImagesRoute
+  '/api/create-file': typeof ApiCreateFileRoute
   '/api/sync': typeof ApiSyncRoute
   '/api/auth/$action': typeof ApiAuthActionRoute
   '/api/plugins/disconnect': typeof ApiPluginsDisconnectRoute
@@ -144,6 +151,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/api/chat'
     | '/api/images'
+    | '/api/create-file'
     | '/api/sync'
     | '/api/auth/$action'
     | '/api/plugins/disconnect'
@@ -190,6 +198,7 @@ export interface RootRouteChildren {
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   ApiChatRoute: typeof ApiChatRoute
   ApiImagesRoute: typeof ApiImagesRoute
+  ApiCreateFileRoute: typeof ApiCreateFileRoute
   ApiSyncRoute: typeof ApiSyncRoute
   ApiAuthActionRoute: typeof ApiAuthActionRoute
   ApiPluginsDisconnectRoute: typeof ApiPluginsDisconnectRoute
@@ -235,6 +244,13 @@ declare module '@tanstack/react-router' {
       path: '/api/images'
       fullPath: '/api/images'
       preLoaderRoute: typeof ApiImagesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/create-file': {
+      id: '/api/create-file'
+      path: '/api/create-file'
+      fullPath: '/api/create-file'
+      preLoaderRoute: typeof ApiCreateFileRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/sync': {
@@ -302,6 +318,7 @@ const rootRouteChildren: RootRouteChildren = {
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   ApiChatRoute: ApiChatRoute,
   ApiImagesRoute: ApiImagesRoute,
+  ApiCreateFileRoute: ApiCreateFileRoute,
   ApiSyncRoute: ApiSyncRoute,
   ApiAuthActionRoute: ApiAuthActionRoute,
   ApiPluginsDisconnectRoute: ApiPluginsDisconnectRoute,
