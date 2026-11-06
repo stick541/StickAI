@@ -211,3 +211,59 @@ export async function handleImages(request: Request): Promise<Response> {
     return fail(e);
   }
 }
+
+
+/* ------------------------------ photo-to-file ------------------------------ */
+
+export async function handleCreateFile(request: Request): Promise<Response> {
+  try {
+    requireSameOrigin(request);
+    if (Number(request.headers.get("content-length") ?? 0) > 6_000_000) throw new HttpError(413, "That image is too large.");
+    const { session, setCookie } = await getSession(request);
+    requireAccount(session);
+    await throttle(`rl:file:${session.uid}`, 10, 3600, "You've reached the hourly file-creation limit. Try again later.");
+
+    const body = await readJson<{ prompt?: string; images?: string[] }>(request);
+    const prompt = String(body.prompt ?? "").trim().slice(0, 4000);
+    const images = (body.images ?? []).filter((v) => typeof v === "string" && /^data:image\/(png|jpeg|webp|gif);base64,/i.test(v)).slice(0, 3);
+    if (!prompt || !images.length) throw new HttpError(400, "Add a picture and describe the file you want Stick to create.");
+
+    const base = env("STICK_API_URL")?.replace(/\/$/, "");
+    if (!base) throw new HttpError(501, "File creation isn't connected to an AI provider yet.");
+    const key = env("STICK_API_KEY");
+    let model = "stick-build";
+    try {
+      const map = JSON.parse(env("STICK_MODEL_MAP") ?? "{}") as Record<string, string>;
+      model = map["stick-build"] ?? model;
+    } catch { /* use the configured Stick Build model id */ }
+
+    const parts: { type: string; text?: string; image_url?: { url: string } }[] = [
+      { type: "text", text: `Create the actual file requested by the user from the attached reference image(s). User request: ${prompt}
+
+Return ONLY a valid JSON object with exactly these fields: filename, mimeType, content, summary.
+Choose a useful real file format based on the request. Supported formats: .md, .txt, .html, .css, .js, .ts, .tsx, .jsx, .py, .json, .csv, .svg, .xml, .sql, .yaml, .yml.
+The content field must contain the complete file contents, not an explanation or placeholder. For notes, faithfully transcribe visible text and organize it cleanly. For drawings/designs, recreate the requested result in the most suitable editable format (for example SVG, HTML/CSS, or code). Preserve important details from the image; mark genuinely unreadable text rather than guessing. Make the file complete and ready to use. Do not wrap the JSON in markdown fences.` },
+      ...images.map((url) => ({ type: "image_url", image_url: { url } })),
+    ];
+    const res = await fetch(`${base}/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...(key ? { Authorization: `Bearer ${key}` } : {}) },
+      body: JSON.stringify({ model, messages: [{ role: "system", content: "You are Stick Build's file-generation engine. You create complete, usable files from user instructions and visual references. Output strict JSON only." }, { role: "user", content: parts }], temperature: 0.2, max_tokens: 16000 }),
+    });
+    if (!res.ok) throw new HttpError(502, `The file-generation model returned an error (${res.status}).`);
+    const upstream = (await res.json()) as { choices?: { message?: { content?: string | { text?: string }[] } }[] };
+    const raw = upstream.choices?.[0]?.message?.content;
+    let text = typeof raw === "string" ? raw : Array.isArray(raw) ? raw.map((p) => p.text ?? "").join("") : "";
+    text = text.trim().replace(/^\`\`\`(?:json)?\s*/i, "").replace(/\s*\`\`\`$/, "");
+    const parsed = JSON.parse(text) as { filename?: string; mimeType?: string; content?: string; summary?: string };
+    const allowed = /\.(md|txt|html|css|js|ts|tsx|jsx|py|json|csv|svg|xml|sql|yaml|yml)$/i;
+    const filename = String(parsed.filename ?? "stick-created-file.md").replace(/[\\/:*?"<>|\u0000-\u001f]/g, "-").slice(0, 100);
+    if (!allowed.test(filename) || typeof parsed.content !== "string" || !parsed.content.trim()) throw new HttpError(502, "The model didn't return a valid, complete file. Try asking for a specific format.");
+    if (parsed.content.length > 1_000_000) throw new HttpError(413, "The generated file is too large.");
+    const mimeByExt: Record<string, string> = { md: "text/markdown", txt: "text/plain", html: "text/html", css: "text/css", js: "text/javascript", ts: "text/plain", tsx: "text/plain", jsx: "text/plain", py: "text/x-python", json: "application/json", csv: "text/csv", svg: "image/svg+xml", xml: "application/xml", sql: "text/plain", yaml: "text/yaml", yml: "text/yaml" };
+    const ext = filename.split(".").pop()!.toLowerCase();
+    return withCookie(json({ filename, mimeType: mimeByExt[ext], content: parsed.content, summary: String(parsed.summary ?? "Your file is ready.") }), setCookie);
+  } catch (e) {
+    return fail(e);
+  }
+}
