@@ -3,7 +3,7 @@ import { decryptJson, encryptJson } from "./crypto";
 import { kv } from "./kv";
 import { HttpError, secret } from "./session";
 
-export type ProviderId = "google" | "slack";
+export type ProviderId = "google" | "slack" | "github";
 
 /** Plugins that have a real server-side connection. */
 export const PLUGIN_PROVIDER: Record<string, ProviderId> = {
@@ -11,6 +11,7 @@ export const PLUGIN_PROVIDER: Record<string, ProviderId> = {
   "google-calendar": "google",
   "google-drive": "google",
   slack: "slack",
+  github: "github",
 };
 
 const GOOGLE_SCOPES: Record<string, string[]> = {
@@ -29,7 +30,9 @@ export function providerOf(plugin: string): ProviderId {
 export const providerConfig = (p: ProviderId) =>
   p === "google"
     ? { clientId: env("GOOGLE_CLIENT_ID"), clientSecret: env("GOOGLE_CLIENT_SECRET") }
-    : { clientId: env("SLACK_CLIENT_ID"), clientSecret: env("SLACK_CLIENT_SECRET") };
+    : p === "slack"
+      ? { clientId: env("SLACK_CLIENT_ID"), clientSecret: env("SLACK_CLIENT_SECRET") }
+      : { clientId: env("GITHUB_CLIENT_ID"), clientSecret: env("GITHUB_CLIENT_SECRET") };
 
 export const isConfigured = (p: ProviderId) => {
   const c = providerConfig(p);
@@ -51,6 +54,12 @@ export function authorizeUrl(request: Request, plugin: string, state: string): s
       scope: (GOOGLE_SCOPES[plugin] ?? []).join(" "), state,
     });
     return `https://accounts.google.com/o/oauth2/v2/auth?${q}`;
+  }
+  if (p === "github") {
+    const q = new URLSearchParams({
+      client_id: clientId!, redirect_uri: redirect, scope: "user,repo", state,
+    });
+    return `https://github.com/login/oauth/authorize?${q}`;
   }
   const q = new URLSearchParams({ client_id: clientId!, redirect_uri: redirect, user_scope: SLACK_USER_SCOPES.join(","), state });
   return `https://slack.com/oauth/v2/authorize?${q}`;
@@ -108,6 +117,17 @@ export async function exchangeCode(request: Request, plugin: string, code: strin
     const j = (await res.json()) as { access_token?: string; refresh_token?: string; expires_in?: number; error_description?: string };
     if (!res.ok || !j.access_token) throw new HttpError(400, j.error_description ?? "Google sign-in failed.");
     return { access_token: j.access_token, ...(j.refresh_token ? { refresh_token: j.refresh_token } : {}), expires_at: Date.now() + (j.expires_in ?? 3600) * 1000 };
+  }
+  if (p === "github") {
+    body.set("grant_type", "authorization_code");
+    const res = await fetch("https://github.com/login/oauth/access_token", {
+      method: "POST",
+      headers: { Accept: "application/json" },
+      body,
+    });
+    const j = (await res.json()) as { access_token?: string; error?: string; error_description?: string };
+    if (!res.ok || !j.access_token) throw new HttpError(400, j.error_description ?? j.error ?? "GitHub sign-in failed.");
+    return { access_token: j.access_token };
   }
   const res = await fetch("https://slack.com/api/oauth.v2.access", { method: "POST", body });
   const j = (await res.json()) as { ok: boolean; error?: string; authed_user?: { access_token?: string } };
