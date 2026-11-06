@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, Check, Copy, RefreshCw, ThumbsDown, ThumbsUp, Volume2, VolumeX } from "lucide-react";
+import { AlertCircle, Check, Copy, Download, RefreshCw, ThumbsDown, ThumbsUp, Volume2, VolumeX } from "lucide-react";
+import { toast } from "sonner";
 import type { Message } from "@/lib/store";
 import { useStore } from "@/lib/store";
 import { Markdown } from "./Markdown";
@@ -27,6 +28,29 @@ function Actions({ m, cid, onRegenerate, isLast }: { m: Message; cid: string; on
       {isLast && <button aria-label="Regenerate" className={b} onClick={onRegenerate}><RefreshCw className="size-4" /></button>}
     </div>
   );
+}
+
+
+async function saveGeneratedFile(file: NonNullable<Message["file"]>) {
+  const blob = new Blob([file.content], { type: file.mimeType || "application/octet-stream" });
+  try {
+    const picker = (window as any).showSaveFilePicker;
+    if (picker) {
+      const handle = await picker({ suggestedName: file.filename, types: [{ description: "StickAI file", accept: { [file.mimeType || "application/octet-stream"]: ["." + file.filename.split(".").pop()] } }] });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      toast.success(`${file.filename} saved.`);
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = file.filename; a.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast("Your browser downloaded the file. Check its Downloads folder.");
+  } catch (e) {
+    if ((e as Error).name !== "AbortError") toast.error("Couldn't save the file. Please try again.");
+  }
 }
 
 export function Thread({ cid, messages, streamingId, onRegenerate, onSuggest, onUpgrade }: { cid: string; messages: Message[]; streamingId: string | null; onRegenerate: () => void; onSuggest: (s: string) => void; onUpgrade: () => void }) {
@@ -118,6 +142,7 @@ export function Thread({ cid, messages, streamingId, onRegenerate, onSuggest, on
                 </div>
               ) : (
                 <Markdown text={m.content} streaming={m.id === streamingId} />
+                {m.file && <div className="mt-3 flex max-w-xl items-center gap-3 rounded-xl border bg-card p-3"><div className="min-w-0 flex-1"><div className="truncate text-sm font-medium">{m.file.filename}</div><div className="text-xs text-muted-foreground">{m.file.summary}</div></div><button onClick={() => saveGeneratedFile(m.file!)} className="inline-flex shrink-0 items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover"><Download className="size-4" />Choose save location</button></div>}
               )}
               {m.id !== streamingId && !m.error && m.content && (
                 <>
