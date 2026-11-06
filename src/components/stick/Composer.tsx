@@ -120,7 +120,7 @@ export function Composer({ onSend, onStop, streaming, hero }: { onSend: (text: s
           </div>
         </div>
       </div>
-      <p className="mt-2 text-center text-xs text-muted-foreground">Stick can make mistakes. Check anything important.</p>
+      <p className="mt-2 text-center text-xs text-muted-foreground">Attach a photo and ask Stick to turn it into a file. Stick can make mistakes — check anything important.</p>
     </div>
   );
 }
