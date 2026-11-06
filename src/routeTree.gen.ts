@@ -103,7 +103,6 @@ export interface FileRoutesByFullPath {
   '/api/chat': typeof ApiChatRoute
   '/api/images': typeof ApiImagesRoute
   '/api/create-file': typeof ApiCreateFileRoute
-  '/api/create-file': typeof ApiCreateFileRoute
   '/api/sync': typeof ApiSyncRoute
   '/api/auth/$action': typeof ApiAuthActionRoute
   '/api/plugins/disconnect': typeof ApiPluginsDisconnectRoute
@@ -154,7 +153,6 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/api/chat'
     | '/api/images'
-    | '/api/create-file'
     | '/api/create-file'
     | '/api/sync'
     | '/api/auth/$action'
