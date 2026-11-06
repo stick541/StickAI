@@ -234,7 +234,7 @@ export async function handleCreateFile(request: Request): Promise<Response> {
     let model = "stick-build";
     try {
       const map = JSON.parse(env("STICK_MODEL_MAP") ?? "{}") as Record<string, string>;
-      model = map["stick-build"] ?? map["stick-2-1"] ?? map["stick-2"] ?? model;
+      model = map["stick-build"] ?? map["stick-2-1"] ?? model;
     } catch { /* use the configured Stick Build model id */ }
 
     const parts: { type: string; text?: string; image_url?: { url: string } }[] = [
