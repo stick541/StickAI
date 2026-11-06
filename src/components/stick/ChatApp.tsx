@@ -14,6 +14,10 @@ import { PluginsView } from "./PluginsView";
 import { ImagesView, LibraryView, MoreView, ProjectsView, ScheduledView } from "./Views";
 import { SearchDialog, SettingsDialog, UpgradeDialog } from "./Dialogs";
 
+function wantsPhotoFile(text: string, images: string[]) {
+  return images.length > 0 && /\b(make|create|turn|convert|build)\b.{0,80}\b(file|document|docx|pdf|spreadsheet|website|html|csv|code|report|notes)\b|\b(from this|from these|using this picture)\b.{0,60}\b(file|document|website|spreadsheet)\b/i.test(text);
+}
+
 function greeting() {
   const h = new Date().getHours();
   return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
@@ -141,6 +145,32 @@ export function ChatApp() {
     const conv = { ...base, messages: [...base.messages, user] };
     st.upsert(conv);
     st.setActive(conv.id);
+    if (wantsPhotoFile(text, images)) {
+      const fileReply: Message = { id: uid(), role: "assistant", content: "I'm creating your file from the picture. When it's ready, you can choose where to save it.", createdAt: Date.now() };
+      const withReply = { ...conv, messages: [...conv.messages, fileReply], updatedAt: Date.now() };
+      st.upsert(withReply);
+      setStreamingId(fileReply.id);
+      void (async () => {
+        try {
+          const res = await fetch("/api/create-file", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ prompt: text, images }),
+          });
+          const data = (await res.json().catch(() => ({}))) as { filename?: string; mimeType?: string; content?: string; summary?: string; error?: string };
+          if (!res.ok || !data.filename || typeof data.content !== "string") throw new Error(data.error || "Stick couldn't create that file. Please try again.");
+          useStore.getState().patchMessage(conv.id, fileReply.id, {
+            content: data.summary || "Your file is ready. Choose where you'd like to save it.",
+            file: { filename: data.filename, mimeType: data.mimeType || "application/octet-stream", content: data.content, summary: data.summary || "Created from your picture." },
+          });
+        } catch (e) {
+          useStore.getState().patchMessage(conv.id, fileReply.id, { error: (e as Error).message || "File creation failed." });
+        } finally {
+          setStreamingId(null);
+        }
+      })();
+      return;
+    }
     run(conv, think, images);
   };
 
