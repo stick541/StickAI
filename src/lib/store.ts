@@ -54,12 +54,12 @@ export interface Settings {
 }
 
 export const MODELS = [
-  { id: "stick", name: "Stick", blurb: "Short, direct answers" },
-  { id: "stick-1", name: "Stick 1", blurb: "Everyday questions" },
-  { id: "stick-1-1", name: "Stick 1.1", blurb: "Separates facts, assumptions and unknowns" },
-  { id: "stick-2", name: "Stick 2", blurb: "Writing, coding and difficult problems" },
-  { id: "stick-2-1", name: "Stick 2.1", blurb: "Understands text and images" },
-  { id: "stick-build", name: "Stick Build", blurb: "Complete code, pages, documents and plans" },
+  { id: "stick", name: "Stick", blurb: "Fast · Basic everyday help and short answers" },
+  { id: "stick-1", name: "Stick 1", blurb: "Everyday · General questions, explanations and conversation" },
+  { id: "stick-1-1", name: "Stick 1.1", blurb: "Improved accuracy · Facts, uncertainty and research" },
+  { id: "stick-2", name: "Stick 2", blurb: "Advanced · Reasoning, mathematics, programming and complex tasks" },
+  { id: "stick-2-1", name: "Stick 2.1", blurb: "Multimodal · Image understanding and advanced analysis" },
+  { id: "stick-build", name: "Stick Build", blurb: "Builder · Complete code, websites, applications and documents" },
 ];
 const DEFAULT_MODEL = "stick-1";
 
