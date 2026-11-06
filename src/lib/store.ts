@@ -8,6 +8,7 @@ export interface Message {
   role: Role;
   content: string;
   images?: string[];
+  file?: { filename: string; mimeType: string; content: string; summary: string };
   error?: string;
   retryAt?: number;
   feedback?: "up" | "down";
